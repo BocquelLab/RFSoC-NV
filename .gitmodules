@@ -1,3 +1,6 @@
 [submodule "qick-dawg"]
 	path = qick-dawg
 	url = git@github.com:sandialabs/qick-dawg.git
+[submodule "qick"]
+	path = qick
+	url = git@github.com:openquantumhardware/qick.git
