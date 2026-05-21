@@ -1,0 +1,372 @@
+{
+    "board": "RFSoC4x2",
+    "sw_version": "0.2.376",
+    "extra_description": [],
+    "fw_timestamp": "Thu Oct 10 17:02:55 2024",
+    "rf": {
+        "type": "usp_rf_data_converter",
+        "fullpath": "usp_rf_data_converter_0",
+        "ip_type": 2,
+        "hs_adc": true,
+        "tiles": {
+            "dac": {
+                "0": {
+                    "coupling": "AC",
+                    "fabric_div": 16,
+                    "out_div": 1,
+                    "blocks": [
+                        "00"
+                    ],
+                    "f_ref": 409.6,
+                    "ref_div": 1,
+                    "fs_mult": 24,
+                    "fs_div": 2,
+                    "fs": 4915.200000000001,
+                    "f_fabric": 307.20000000000005,
+                    "f_out": 307.20000000000005
+                },
+                "2": {
+                    "coupling": "AC",
+                    "fabric_div": 16,
+                    "out_div": 1,
+                    "blocks": [
+                        "20"
+                    ],
+                    "f_ref": 409.6,
+                    "ref_div": 1,
+                    "fs_mult": 24,
+                    "fs_div": 2,
+                    "fs": 4915.200000000001,
+                    "f_fabric": 307.20000000000005,
+                    "f_out": 307.20000000000005
+                }
+            },
+            "adc": {
+                "0": {
+                    "coupling": "AC",
+                    "fabric_div": 8,
+                    "out_div": 2,
+                    "blocks": [
+                        "00",
+                        "02"
+                    ],
+                    "f_ref": 409.6,
+                    "ref_div": 1,
+                    "fs_mult": 24,
+                    "fs_div": 4,
+                    "fs": 2457.6000000000004,
+                    "f_fabric": 307.20000000000005,
+                    "f_out": 153.60000000000002,
+                    "outclk_limits": [
+                        103.2258064516129,
+                        206.4516129032258
+                    ]
+                }
+            }
+        },
+        "dacs": {
+            "00": {
+                "index": [
+                    0,
+                    0
+                ],
+                "coupling": "AC",
+                "f_ref": 409.6,
+                "fs_mult": 24,
+                "fs_div": 2,
+                "fs": 4915.200000000001,
+                "f_fabric": 307.20000000000005,
+                "interpolation": 1,
+                "datapath": 4
+            },
+            "20": {
+                "index": [
+                    2,
+                    0
+                ],
+                "coupling": "AC",
+                "f_ref": 409.6,
+                "fs_mult": 24,
+                "fs_div": 2,
+                "fs": 4915.200000000001,
+                "f_fabric": 307.20000000000005,
+                "interpolation": 1,
+                "datapath": 4
+            }
+        },
+        "adcs": {
+            "00": {
+                "index": [
+                    0,
+                    0
+                ],
+                "coupling": "AC",
+                "f_ref": 409.6,
+                "fs_mult": 24,
+                "fs_div": 4,
+                "fs": 2457.6000000000004,
+                "f_fabric": 307.20000000000005,
+                "decimation": 1
+            },
+            "02": {
+                "index": [
+                    0,
+                    1
+                ],
+                "coupling": "AC",
+                "f_ref": 409.6,
+                "fs_mult": 24,
+                "fs_div": 4,
+                "fs": 2457.6000000000004,
+                "f_fabric": 307.20000000000005,
+                "decimation": 1
+            }
+        },
+        "clk_groups": [
+            [
+                [
+                    "axis_tproc64x32_x8_0",
+                    "clock"
+                ],
+                [
+                    "dac",
+                    0
+                ]
+            ],
+            [
+                [
+                    "dac",
+                    2
+                ]
+            ],
+            [
+                [
+                    "adc",
+                    0
+                ]
+            ]
+        ],
+        "revision": 2,
+        "version": "2.6"
+    },
+    "refclk_freq": 409.6,
+    "tprocs": [
+        {
+            "type": "axis_tproc64x32_x8",
+            "fullpath": "axis_tproc64x32_x8_0",
+            "dmem_size": 1024,
+            "clk_srcs": {
+                "clock": {
+                    "source": [
+                        "dac",
+                        0
+                    ],
+                    "f_clk": 307.20000000000005,
+                    "src_range": null
+                }
+            },
+            "revision": 4,
+            "version": "1.0",
+            "f_time": 307.2,
+            "output_pins": [
+                [
+                    "output",
+                    7,
+                    0,
+                    "PMOD0_0"
+                ],
+                [
+                    "output",
+                    7,
+                    1,
+                    "PMOD0_1"
+                ],
+                [
+                    "output",
+                    7,
+                    2,
+                    "PMOD0_2"
+                ],
+                [
+                    "output",
+                    7,
+                    3,
+                    "PMOD0_3"
+                ],
+                [
+                    "output",
+                    7,
+                    4,
+                    "PMOD0_4"
+                ],
+                [
+                    "output",
+                    7,
+                    5,
+                    "PMOD0_5"
+                ],
+                [
+                    "output",
+                    7,
+                    6,
+                    "PMOD0_6"
+                ],
+                [
+                    "output",
+                    7,
+                    7,
+                    "PMOD0_7"
+                ]
+            ],
+            "start_pin": "PMOD1_0",
+            "pmem_size": 1024
+        }
+    ],
+    "mr_buf": {
+        "type": "mr_buffer_et",
+        "fullpath": "mr_buffer_et_0",
+        "maxlen": 8192,
+        "junk_len": 8,
+        "readouts": [
+            "axis_avg_buffer_0",
+            "axis_avg_buffer_1"
+        ],
+        "revision": 3,
+        "version": "1.0",
+        "trigger_type": "output",
+        "trigger_port": 7,
+        "trigger_bit": 12
+    },
+    "ddr4_buf": {
+        "type": "axis_buffer_ddr_v1",
+        "fullpath": "axis_buffer_ddr_v1_0",
+        "burst_len": 256,
+        "junk_len": 801,
+        "readouts": [
+            "axis_avg_buffer_0",
+            "axis_avg_buffer_1"
+        ],
+        "revision": 3,
+        "version": "1.0",
+        "maxlen": 1073741824,
+        "trigger_type": "output",
+        "trigger_port": 7,
+        "trigger_bit": 13
+    },
+    "gens": [
+        {
+            "type": "axis_signal_gen_v6",
+            "fullpath": "axis_signal_gen_v6_0",
+            "maxlen": 65536,
+            "complex_env": true,
+            "samps_per_clk": 16,
+            "maxv_scale": 1.0,
+            "has_dds": true,
+            "b_dds": 32,
+            "b_phase": 32,
+            "maxv": 32766,
+            "has_mixer": false,
+            "revision": 4,
+            "version": "1.0",
+            "dac": "00",
+            "fs": 4915.200000000001,
+            "fs_mult": 24,
+            "fs_div": 2,
+            "interpolation": 1,
+            "f_fabric": 307.20000000000005,
+            "f_dds": 4915.200000000001,
+            "fdds_div": 2,
+            "tproc_ch": 0
+        },
+        {
+            "type": "axis_signal_gen_v6",
+            "fullpath": "axis_signal_gen_v6_1",
+            "maxlen": 65536,
+            "complex_env": true,
+            "samps_per_clk": 16,
+            "maxv_scale": 1.0,
+            "has_dds": true,
+            "b_dds": 32,
+            "b_phase": 32,
+            "maxv": 32766,
+            "has_mixer": false,
+            "revision": 4,
+            "version": "1.0",
+            "dac": "20",
+            "fs": 4915.200000000001,
+            "fs_mult": 24,
+            "fs_div": 2,
+            "interpolation": 1,
+            "f_fabric": 307.20000000000005,
+            "f_dds": 4915.200000000001,
+            "fdds_div": 2,
+            "tproc_ch": 1
+        }
+    ],
+    "iqs": [],
+    "time_taggers": [],
+    "readouts": [
+        {
+            "avg_maxlen": 16384,
+            "buf_maxlen": 1024,
+            "has_edge_counter": true,
+            "has_weights": false,
+            "trigger_type": "output",
+            "trigger_port": 7,
+            "trigger_bit": 14,
+            "tproc_ch": 0,
+            "adc": "00",
+            "b_phase": 32,
+            "fs": 2457.6000000000004,
+            "fs_mult": 24,
+            "fs_div": 4,
+            "decimation": 1,
+            "f_fabric": 307.20000000000005,
+            "f_dds": 2457.6000000000004,
+            "fdds_div": 4,
+            "f_output": 307.20000000000005,
+            "b_dds": 32,
+            "iq_offset": 0.0,
+            "has_outsel": true,
+            "avgbuf_fullpath": "axis_avg_buffer_0",
+            "ro_fullpath": "axis_readout_v2_0",
+            "avgbuf_version": "1.1",
+            "ro_version": "1.0",
+            "avgbuf_revision": 2,
+            "ro_revision": 8,
+            "avgbuf_type": "axis_avg_buffer",
+            "ro_type": "axis_readout_v2"
+        },
+        {
+            "avg_maxlen": 16384,
+            "buf_maxlen": 1024,
+            "has_edge_counter": true,
+            "has_weights": false,
+            "trigger_type": "output",
+            "trigger_port": 7,
+            "trigger_bit": 15,
+            "tproc_ch": 1,
+            "adc": "02",
+            "b_phase": 32,
+            "fs": 2457.6000000000004,
+            "fs_mult": 24,
+            "fs_div": 4,
+            "decimation": 1,
+            "f_fabric": 307.20000000000005,
+            "f_dds": 2457.6000000000004,
+            "fdds_div": 4,
+            "f_output": 307.20000000000005,
+            "b_dds": 32,
+            "iq_offset": 0.0,
+            "has_outsel": true,
+            "avgbuf_fullpath": "axis_avg_buffer_1",
+            "ro_fullpath": "axis_readout_v2_1",
+            "avgbuf_version": "1.1",
+            "ro_version": "1.0",
+            "avgbuf_revision": 2,
+            "ro_revision": 8,
+            "avgbuf_type": "axis_avg_buffer",
+            "ro_type": "axis_readout_v2"
+        }
+    ]
+}
