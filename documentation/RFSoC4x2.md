@@ -26,3 +26,8 @@ Lorsque branchée en Ethernet, elle apparait sur le "Dual DNS Server" installé 
 On peut accéder à un shell sur la carte par SSH: `ssh xilinx@pynq.local # mot de passe: xilinx`.
 
 Il y a aussin un daemon Jupyter qui tourne et qui rend un notebook Jupyter sur la carte accessible. Il suffit d'aller sur `http://pynq.local/` dans un navigateur.
+
+# Installation de PYNQ
+Pour installer PYNQ, il faut flasher la carte SD avec un fichier `*.iso` qui contient une release de PYNQ. La carte SD du RFSoC4x2 est située dans le coin supérieur gauche.
+
+Attention, QICK (au moment où j'écris) supporte les verions supérieures à supérieures à 2.6 et inférieures à 3.1 seulement.
