@@ -9,8 +9,10 @@
 cd C:/Codes/USBADC/software
 . .venv/bin/activate # Linux
 . .venv/Scripts/activate # Windows avec git bash
-.venv/Scripts/activate # Windows avec cmd ou powersheel
-python app.py
+.venv/Scripts/activate # Windows avec cmd ou powershell
+
+python3 app.py # Linux
+py app.py # Windows
 ```
 
 5. Lancer un script Python qui utilise QICK. La carte devrait se trouver sur `pynq.local`, si elle n'est pas trouvable, essayez avec son ip directement.
