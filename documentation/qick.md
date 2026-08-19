@@ -21,7 +21,7 @@ Le mainteneur de la librairie (Sho Uemura) est contactable sur le canal `#qick` 
 # tProc
 Le projet QICK utilise le FPGA pour y construire [un processeur fait sur mesure](https://github.com/BocquelLab/qick/blob/main/firmware/tProcessor_64_and_Signal_Generator_V4.pdf) appellé tProc pour l'envoie et la réception de pulses.
 
-Le jeu d'instruction de ce processeur est différent de celui trouvé dans les architectures d'ordinateurs modernes. Il contient les instructions usuelles pour faire de l'arithmétique, des branchements et manipuler la pile. Il contient aussi des instructions pour manipuler l'horloge interne, séquencer des pulses, jouer des pulses, stopper le processeur jusqu'à un certain temps et contient aussi plusieurs pages de registres. La documentation couvre une bonne partie du fonctionnement du jeu d'instruction, mais manque d'information sur comment les entrées fonctionnent.
+Le jeu d'instruction de ce processeur est différent de celui trouvé dans les architectures d'ordinateurs modernes. Il contient les instructions usuelles pour faire de l'arithmétique, des branchements et manipuler la pile. Il contient aussi des instructions pour manipuler l'horloge interne, séquencer des pulses, jouer des pulses, stopper le processeur jusqu'à un certain temps et contient aussi plusieurs pages de registres. La [documentation](https://github.com/BocquelLab/qick/blob/main/firmware/tProcessor_64_and_Signal_Generator_V4.pdf) couvre une bonne partie du fonctionnement du jeu d'instruction, mais manque d'information sur comment les entrées fonctionnent.
 
 De manière générale, il n'est pas nécessaire d'écrire directement en language d'assemblage car les abstractions écrites en Python permettent de construire un programme dans ce language.
 
