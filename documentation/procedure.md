@@ -8,14 +8,23 @@ cd //bob/Recherche/Bocquel/Appareils/ADC\ externe # Ou le re-télécharger avec 
 git pull # Aller chercher les dernières modifications
 cd software
 
-# Faire ceci sur un système Linux
+# Créer un environnement virtuel si il n'existe pas
+python -m venv .venv # Linux
+py -m venv .venv # Windows
 . .venv/bin/activate
-python3 app.py
+pip install -r requirements.txt
+
+# Si il existe, simplement l'activer
+. .venv/bin/activate # Linux
+. .venv/Scripts/activate # Windows
+
+# Démarrer le serveur web
+python3 app.py # Linux
+py app.py # Windows
 
 
-# Faire cei sur un système Windows
-. .venv/Scripts/activate
-py app.py
+# L'interface devrait être lancer, vous pouvez allez à http://localhost:5000/ sur un naviguateur web.
+# Il devrait y avoir des données qui apparaissent si l'ADC externe est branché.
 ```
 
 5. Lancer un script Python qui utilise QICK. La carte devrait se trouver sur `pynq.local`, si elle n'est pas trouvable, essayez avec son ip directement.
