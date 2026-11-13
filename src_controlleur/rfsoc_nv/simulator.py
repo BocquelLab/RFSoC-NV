@@ -62,6 +62,7 @@ class NVWorld:
     laser_pin (0)               index in the board's output pin list that gates the laser (0 = PMOD0_0)
     apd_ro_ch (0)               readout channel the APD is connected to (0 = ADC_D)
     mw_connected, laser_connected, apd_connected (True)   unplug a cable in the simulation
+    laser_gated (True)          False: the laser ignores its gate and is always on (constant power mode)
     resonances_mhz ((2870.0,))  spin resonance frequencies
     count_rate (200e3)          APD counts per second with the laser on, spin in ms = 0
     dark_rate (300.0)           APD counts per second without laser
@@ -76,7 +77,7 @@ class NVWorld:
     """
 
     DEFAULTS = dict(mw_gen_ch=0, laser_pin=0, apd_ro_ch=0,
-                    mw_connected=True, laser_connected=True, apd_connected=True,
+                    mw_connected=True, laser_connected=True, apd_connected=True, laser_gated=True,
                     resonances_mhz=(2870.0,), count_rate=200e3, dark_rate=300.0, contrast=0.3,
                     rabi_mhz_full_scale=10.0, t2_star_us=1.0, t2_us=200.0, t1_us=5000.0,
                     t_polarize_ns=250.0, t_optical_dephase_ns=100.0, apd_pulse_amplitude=3000,
@@ -189,6 +190,14 @@ class NVWorld:
         if self._mw is not None and self._mw[3] != _INF:
             t_rel = max(t_rel, self._mw[3])
         return self.t + int(math.ceil(t_rel))
+
+    def count(self, duration_us):
+        """ Expected number of APD pulses during the next ``duration_us`` with the outputs as they are now:
+        what a counter outside the board (the NI card) sees between two programs. Advances the time.
+        """
+        span = max(1, int(round(duration_us * self.f_time)))
+        self._windows.append(['external', span, 0.0])
+        return sum(counts for ro, counts in self.process((), self.t + span) if ro == 'external')
 
     # ------------------------------------------------------------------ time evolution
     def process(self, events, t_end):
@@ -336,7 +345,7 @@ class NVWorld:
         p = self.params
         dt = dt_cycles * self.cyc_us  # us
         s = self._s
-        laser = self.laser_on and p['laser_connected']
+        laser = (self.laser_on or not p['laser_gated']) and p['laser_connected']
         mw = self._mw
         mw_on = mw is not None and mw[0] > 0 and p['mw_connected']
         fluorescence = 0.0
@@ -450,6 +459,20 @@ class SimulatedSoc:
     def sim_outputs(self):
         """ Present state of the simulated outputs: laser gate level and microwave pulse being played. """
         return dict(laser_on=self._world.laser_on, mw=self._world.mw_state)
+
+    def sim_apd_counts(self, duration):
+        """ Number of APD pulses a counter outside the board (the NI card) gets during ``duration`` seconds
+        with the outputs as they are now, e.g. during a continuous microwave pulse. With shot noise.
+        Only between two programs; does not wait ``duration``.
+        """
+        with self._lock:
+            thread = self._thread
+            if thread is not None:
+                thread.join(0.2)  # a program that just issued its last outputs
+            if self._running():
+                raise RuntimeError('simulator: counting outside the board is only simulated between two programs')
+            expected = self._world.count(float(duration) * 1e6)
+            return int(self._rng.poisson(expected)) if expected > 0 else 0
 
     def sim_report(self):
         """ What the emulator saw during the last program: number of words and executed instructions,
@@ -585,8 +608,14 @@ class SimulatedSoc:
     def start_tproc(self):
         """ Start the loaded program (no effect while a program is running, as on the board). """
         with self._lock:
-            if self._running() or self._start_src != 'internal':
+            if self._start_src != 'internal':
                 return
+            thread = self._thread
+            if thread is not None and thread.is_alive():
+                # a short program that has ended on the board long ago may still be emulated here
+                thread.join(0.05)
+                if thread.is_alive():
+                    return
             self._launch(None)
 
     def stop_tproc(self, lazy=False):

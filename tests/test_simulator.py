@@ -14,7 +14,7 @@ warnings.simplefilter('ignore')
 
 import qickdawg as qd  # noqa: E402
 from qick.asm_v1 import QickProgram  # noqa: E402
-from rfsoc_nv import QickBoard, GainLimitError, BoardBusyError, decode_program  # noqa: E402
+from rfsoc_nv import QickBoard, GainLimitError, BoardBusyError, SteppedCW, decode_program  # noqa: E402
 
 RESONANCE = 2870.0  # MHz
 RABI_FULL = 10.0  # MHz at full gain
@@ -271,6 +271,89 @@ def test_outputs_off_stops_cw_and_laser():
         board.outputs_off()
         out = board.soc.sim_outputs()
         assert not out['laser_on'] and out['mw'] is None, out
+    finally:
+        board.close()
+
+
+def test_stepped_cw_odmr_with_external_counter():
+    """ CW ODMR as with the NI card: the PC steps the frequency, a counter outside the board counts. """
+    board = make_board()
+    try:
+        cw = SteppedCW(board, gen_ch=0, nqz=2, gate_pins=(0,))
+        freqs = np.linspace(2840e6, 2900e6, 61)
+        played = cw.configure(freqs, gain=3000)
+        assert max(abs(a - b) for a, b in zip(played, freqs)) < 1.0  # generator resolution about 1 Hz
+        assert len(cw._prog.binprog) < 30
+        cw.start()
+        out = board.soc.sim_outputs()
+        assert out['laser_on'] and out['mw'][2] and abs(out['mw'][0] - 2840.0) < 1e-3, out
+        assert abs(out['mw'][1] - 3000 / 32766) < 1e-6, out
+        for sweep in range(2):
+            counts = []
+            for f in freqs:
+                cw.step()
+                counts.append(board.soc.sim_apd_counts(0.01))
+                assert abs(board.soc.sim_outputs()['mw'][0] - f / 1e6) < 1e-3
+            cw.reset()  # also checks the number of steps done by the board
+            counts = np.array(counts)
+            assert abs(freqs[np.argmin(counts)] - RESONANCE * 1e6) <= 2e6, freqs[np.argmin(counts)]
+            assert 0.03 < 1 - counts.min() / np.median(counts) < 0.16, counts
+        # the list wraps around: after the last entry comes the first
+        for _ in range(len(freqs) + 1):
+            cw.step()
+        assert abs(board.soc.sim_outputs()['mw'][0] - 2840.0) < 1e-3
+        cw.reset()
+        cw.stop()
+        out = board.soc.sim_outputs()
+        assert not out['laser_on'] and out['mw'] is None, out
+        try:
+            cw.step()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('step() with the output off was accepted')
+    finally:
+        board.close()
+
+
+def test_stepped_cw_refusals_and_lost_steps():
+    board = make_board()
+    try:
+        cw = SteppedCW(board, gen_ch=0, nqz=2)
+        for bad in (lambda: cw.configure([2870e6], gain=20001),  # above max_gain of make_board
+                    lambda: cw.configure([2400e6], gain=100),  # outside Nyquist zone 2
+                    lambda: cw.configure([], gain=100),
+                    lambda: cw.configure([3000e6] * (cw.max_points + 1), gain=100)):
+            try:
+                bad()
+            except ValueError:  # GainLimitError is a ValueError
+                pass
+            else:
+                raise AssertionError('invalid configuration was accepted')
+        # the limit is also enforced on the compiled program when it is loaded
+        cw.configure([2870e6, 2880e6], gain=100)
+        cw._prog = cw._make_program(20001)
+        try:
+            cw.start()
+        except GainLimitError:
+            pass
+        else:
+            raise AssertionError('program above the gain limit was loaded')
+        assert not cw.running and board.soc.sim_outputs()['mw'] is None
+        # without gate pins the laser gate stays low
+        cw.configure([2870e6, 2880e6], gain=100)
+        cw.start()
+        assert not board.soc.sim_outputs()['laser_on']
+        cw.step()
+        board.soc.sim_wait(1)
+        board.soc.set_tproc_counter(addr=4, val=0)  # pretend the board missed the steps
+        try:
+            cw.reset()
+        except RuntimeError as err:
+            assert 'frequency steps' in str(err)
+        else:
+            raise AssertionError('lost steps were not detected')
+        cw.stop()
     finally:
         board.close()
 

@@ -7,6 +7,7 @@ can be used on its own in a script or notebook.
 | File | Content |
 |---|---|
 | `board.py` | `QickBoard`: connection to the board (Pyro4) or to the simulator, version check, hard gain limit, one user at a time, `outputs_off()` |
+| `cw.py` | `SteppedCW`: continuous microwave output with a frequency list stepped from the PC, one call per point (CW ODMR with a counter outside the board) |
 | `simulator.py` | `SimulatedSoc`: stands in for the board; `NVWorld`: simulated laser, microwave line, NV centres and APD |
 | `tproc_v1.py` | decoder and emulator of the tProc v1 instruction set (runs the compiled program words) |
 | `board_cfg_qick_4x2_photon_counting.json` | `soc.get_cfg()` of the real board (qick 0.2.302, firmware built 2024-10-10), used by the simulator |
@@ -54,6 +55,28 @@ board.close()
 - Plain qick programs take `board.soc` and `board.soccfg` (`prog.acquire(board.soc, ...)`).
 - Nothing numpy is sent to the board (it runs numpy 1.x under Python 3.8 and cannot read numpy 2 pickles).
 
+## Continuous output stepped from the PC
+
+For CW ODMR where another instrument counts the photons (the NI card) and asks for the next frequency
+before each point:
+
+```python
+from rfsoc_nv import SteppedCW
+
+cw = SteppedCW(board, gen_ch=0, nqz=2)            # gate_pins=(0,): PMOD0_0 high while the output is on
+cw.configure([2.86e9, 2.87e9, 2.88e9], gain=1000) # Hz, DAC units; refused above max_gain
+cw.start()                                        # continuous output at the first frequency
+cw.step()                                         # plays entry 0; the next step() entry 1, ...
+cw.reset()                                        # back to entry 0; raises if the board missed steps
+cw.stop()                                         # all outputs off
+```
+
+The list (up to 1016 points) is stored in the tProc data memory; `step()` restarts a 20-word program that
+plays the next entry as a periodic pulse. Measured on the board (2026-11-13): 0.8 ms per step (network
+call), the frequency changes about 1 us after the board has received it; `start()` takes 155 ms.
+Nyquist zone 1 covers 0 .. 2457.6 MHz, zone 2 covers 2457.6 .. 4915.2 MHz; the DAC also emits the image
+at 4915.2 MHz - f.
+
 ## Simulator
 
 `simulate=True` builds and compiles the real program and runs the compiled words in a tProc v1 emulator.
@@ -67,7 +90,10 @@ board = QickBoard(max_gain=2000, simulate=True, sim_options=dict(
                apd_connected=True)))     # False: unplugged APD -> zero counts
 board.soc.sim_report()                   # program size, late outputs, queue fill, shots, ...
 board.soc.sim_outputs()                  # laser gate level, microwave being played
+board.soc.sim_apd_counts(0.01)           # APD pulses a counter outside the board sees in 10 ms (between programs)
 ```
+
+`world=dict(laser_gated=False)` simulates a laser that is always on, whatever its gate input.
 
 Not simulated: generator envelopes (pulses are rectangular), the decimated / DDR4 / MR buffers, tProc input
 ports, Nyquist images and everything analog between the board and the sample. Every instruction is charged

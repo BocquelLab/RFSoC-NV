@@ -23,7 +23,7 @@ warnings.simplefilter('ignore')
 
 import qickdawg as qd  # noqa: E402
 from qick.asm_v1 import QickProgram  # noqa: E402
-from rfsoc_nv import QickBoard, GainLimitError, BoardConnectionError  # noqa: E402
+from rfsoc_nv import SteppedCW, QickBoard, GainLimitError, BoardConnectionError  # noqa: E402
 
 COUNTER = 1
 
@@ -167,6 +167,36 @@ def main():
             print(f'[ok] refused: {err}')
         else:
             raise AssertionError('program above the gain limit was loaded')
+
+        # ---- continuous output with a frequency list stepped from the PC (CW ODMR with the NI card)
+        cw = SteppedCW(board, gen_ch=0, nqz=2)
+        freqs = np.linspace(2.82e9, 2.92e9, 101)
+        cw.configure(freqs, gain=args.gain)
+        start = time.perf_counter()
+        cw.start()
+        t_start = time.perf_counter() - start
+        durations = []
+        for sweep in range(5):
+            for _ in freqs:
+                t0 = time.perf_counter()
+                cw.step()
+                durations.append(time.perf_counter() - t0)
+            cw.reset()  # raises if the board did not do every step
+        durations = np.array(durations) * 1e3
+        index = int(board.soc.get_tproc_counter(addr=2))
+        runs = int(board.soc.get_tproc_counter(addr=4))
+        assert index == 0 and runs == 5 * len(freqs) + 1, (index, runs)
+        start = time.perf_counter()
+        cw.stop()
+        print(f'[ok] stepped CW: {len(cw._prog.binprog)} words, switch-on {t_start * 1e3:.0f} ms, '
+              f'{len(durations)} steps all done by the board, per step {np.median(durations):.2f} ms median, '
+              f'{durations.max():.2f} ms max; switch-off {(time.perf_counter() - start) * 1e3:.0f} ms')
+        try:
+            cw.configure(freqs, gain=int(args.max_gain) + 1)
+        except GainLimitError as err:
+            print(f'[ok] refused: {err}')
+        else:
+            raise AssertionError('stepped CW above the gain limit was accepted')
 
         if args.simulate:
             print('     simulator report:', board.soc.sim_report())

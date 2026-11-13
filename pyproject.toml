@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rfsoc-nv"
-version = "0.1.0"
+version = "0.2.0"
 description = "PC-side client and simulator for the BocquelLab RFSoC4x2 (QICK / qick-dawg) NV setup"
 requires-python = ">=3.8"
 # qick and qickdawg are installed separately (editable, from the BocquelLab forks, qickdawg with --no-deps):
