@@ -51,11 +51,13 @@ class SteppedCW:
     @param int nqz: Nyquist zone of the generator, 1 (0 .. fs/2) or 2 (fs/2 .. fs)
     @param gate_pins: indices in the board's digital output list (0 = PMOD0_0) that are set high while the
         output is on, e.g. a laser gate. All other digital outputs are low.
+    @param bool check_zone: refuse frequencies outside the Nyquist zone ``nqz`` (default). False: any
+        frequency up to fs is played with the DAC set to ``nqz`` (to compare the two settings)
     @param int period: length of the repeated pulse in generator clock cycles; a frequency step takes
         effect at the end of the period being played (16 cycles = 52 ns)
     """
 
-    def __init__(self, board, gen_ch=0, nqz=2, gate_pins=(), period=16):
+    def __init__(self, board, gen_ch=0, nqz=2, gate_pins=(), period=16, check_zone=True):
         self._board = board
         soccfg = board.soccfg
         if soccfg is None:
@@ -66,6 +68,7 @@ class SteppedCW:
         self._nqz = int(nqz)
         if self._nqz not in (1, 2):
             raise ValueError(f'Nyquist zone must be 1 or 2, got {nqz}.')
+        self._check_zone = bool(check_zone)
         self._period = int(period)
         if not 3 <= self._period <= 0xFFFF:
             raise ValueError(f'period must be 3 .. 65535 generator clock cycles, got {period}.')
@@ -92,6 +95,8 @@ class SteppedCW:
     def frequency_limits(self):
         """ (min, max) output frequency in Hz for the configured Nyquist zone. """
         fs = self._board.soccfg['gens'][self._gen_ch]['fs'] * 1e6
+        if not self._check_zone:
+            return 0.0, fs
         return (self._nqz - 1) * fs / 2, self._nqz * fs / 2
 
     @property
@@ -123,8 +128,8 @@ class SteppedCW:
         low, high = self.frequency_limits
         frequency = float(frequency)
         if not low < frequency < high:
-            raise ValueError(f'Frequency {frequency / 1e6:.6f} MHz is outside Nyquist zone {self._nqz} of '
-                             f'generator {self._gen_ch} (]{low / 1e6:.1f}, {high / 1e6:.1f}[ MHz).')
+            raise ValueError(f'Frequency {frequency / 1e6:.6f} MHz is outside the range of generator '
+                             f'{self._gen_ch} in Nyquist zone {self._nqz} (]{low / 1e6:.1f}, {high / 1e6:.1f}[ MHz).')
         soccfg = self._board.soccfg
         word = int(soccfg.freq2reg(frequency / 1e6, gen_ch=self._gen_ch))
         return word, float(soccfg.reg2freq(word, gen_ch=self._gen_ch)) * 1e6
