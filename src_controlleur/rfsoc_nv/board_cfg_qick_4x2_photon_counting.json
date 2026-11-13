@@ -1,0 +1,260 @@
+{
+ "board": "RFSoC4x2",
+ "sw_version": "0.2.302",
+ "extra_description": [],
+ "dacs": {
+  "00": {
+   "fs": 4915.2,
+   "fs_div": 2,
+   "fs_mult": 24,
+   "f_fabric": 307.2,
+   "interpolation": 1,
+   "index": [
+    0,
+    0
+   ]
+  },
+  "20": {
+   "fs": 4915.2,
+   "fs_div": 2,
+   "fs_mult": 24,
+   "f_fabric": 307.2,
+   "interpolation": 1,
+   "index": [
+    2,
+    0
+   ]
+  }
+ },
+ "adcs": {
+  "00": {
+   "fs": 2457.6,
+   "fs_div": 4,
+   "fs_mult": 24,
+   "f_fabric": 307.2,
+   "decimation": 1,
+   "index": [
+    0,
+    0
+   ]
+  },
+  "02": {
+   "fs": 2457.6,
+   "fs_div": 4,
+   "fs_mult": 24,
+   "f_fabric": 307.2,
+   "decimation": 1,
+   "index": [
+    0,
+    1
+   ]
+  }
+ },
+ "refclk_freq": 409.6,
+ "fw_timestamp": "Thu Oct 10 17:02:55 2024",
+ "mr_buf": {
+  "type": "mr_buffer_et",
+  "fullpath": "mr_buffer_et_0",
+  "maxlen": 8192,
+  "junk_len": 8,
+  "readouts": [
+   "axis_avg_buffer_0",
+   "axis_avg_buffer_1"
+  ],
+  "revision": 3,
+  "version": "1.0",
+  "trigger_type": "output",
+  "trigger_port": 7,
+  "trigger_bit": 12
+ },
+ "ddr4_buf": {
+  "type": "axis_buffer_ddr_v1",
+  "fullpath": "axis_buffer_ddr_v1_0",
+  "readouts": [
+   "axis_avg_buffer_0",
+   "axis_avg_buffer_1"
+  ],
+  "burst_len": 256,
+  "junk_len": 801,
+  "junk_nt": 4,
+  "revision": 3,
+  "version": "1.0",
+  "maxlen": 1073741824,
+  "trigger_type": "output",
+  "trigger_port": 7,
+  "trigger_bit": 13
+ },
+ "gens": [
+  {
+   "type": "axis_signal_gen_v6",
+   "fullpath": "axis_signal_gen_v6_0",
+   "revision": 4,
+   "version": "1.0",
+   "tproc_ch": 0,
+   "dac": "00",
+   "has_mixer": false,
+   "fs": 4915.2,
+   "fs_mult": 24,
+   "fs_div": 2,
+   "interpolation": 1,
+   "f_fabric": 307.2,
+   "f_dds": 4915.2,
+   "fdds_div": 2,
+   "maxlen": 65536,
+   "b_dds": 32,
+   "b_phase": 32,
+   "switch_ch": 0,
+   "samps_per_clk": 16,
+   "maxv": 32766,
+   "maxv_scale": 1.0
+  },
+  {
+   "type": "axis_signal_gen_v6",
+   "fullpath": "axis_signal_gen_v6_1",
+   "revision": 4,
+   "version": "1.0",
+   "tproc_ch": 1,
+   "dac": "20",
+   "has_mixer": false,
+   "fs": 4915.2,
+   "fs_mult": 24,
+   "fs_div": 2,
+   "interpolation": 1,
+   "f_fabric": 307.2,
+   "f_dds": 4915.2,
+   "fdds_div": 2,
+   "maxlen": 65536,
+   "b_dds": 32,
+   "b_phase": 32,
+   "switch_ch": 1,
+   "samps_per_clk": 16,
+   "maxv": 32766,
+   "maxv_scale": 1.0
+  }
+ ],
+ "iqs": [],
+ "readouts": [
+  {
+   "avg_maxlen": 16384,
+   "buf_maxlen": 1024,
+   "has_edge_counter": true,
+   "trigger_type": "output",
+   "trigger_port": 7,
+   "trigger_bit": 14,
+   "tproc_ch": 0,
+   "adc": "00",
+   "b_phase": 32,
+   "fs": 2457.6,
+   "fs_mult": 24,
+   "fs_div": 4,
+   "decimation": 1,
+   "f_fabric": 307.2,
+   "f_dds": 2457.6,
+   "fdds_div": 4,
+   "f_output": 307.2,
+   "b_dds": 32,
+   "iq_offset": 0.0,
+   "has_outsel": true,
+   "avgbuf_revision": 2,
+   "ro_revision": 8,
+   "avgbuf_version": "1.1",
+   "ro_version": "1.0",
+   "avgbuf_fullpath": "axis_avg_buffer_0",
+   "ro_fullpath": "axis_readout_v2_0",
+   "avgbuf_type": "axis_avg_buffer",
+   "ro_type": "axis_readout_v2"
+  },
+  {
+   "avg_maxlen": 16384,
+   "buf_maxlen": 1024,
+   "has_edge_counter": true,
+   "trigger_type": "output",
+   "trigger_port": 7,
+   "trigger_bit": 15,
+   "tproc_ch": 1,
+   "adc": "02",
+   "b_phase": 32,
+   "fs": 2457.6,
+   "fs_mult": 24,
+   "fs_div": 4,
+   "decimation": 1,
+   "f_fabric": 307.2,
+   "f_dds": 2457.6,
+   "fdds_div": 4,
+   "f_output": 307.2,
+   "b_dds": 32,
+   "iq_offset": 0.0,
+   "has_outsel": true,
+   "avgbuf_revision": 2,
+   "ro_revision": 8,
+   "avgbuf_version": "1.1",
+   "ro_version": "1.0",
+   "avgbuf_fullpath": "axis_avg_buffer_1",
+   "ro_fullpath": "axis_readout_v2_1",
+   "avgbuf_type": "axis_avg_buffer",
+   "ro_type": "axis_readout_v2"
+  }
+ ],
+ "tprocs": [
+  {
+   "type": "axis_tproc64x32_x8",
+   "fullpath": "axis_tproc64x32_x8_0",
+   "dmem_size": 1024,
+   "pmem_size": 1024,
+   "revision": 4,
+   "version": "1.0",
+   "output_pins": [
+    [
+     "output",
+     7,
+     0,
+     "PMOD0_0"
+    ],
+    [
+     "output",
+     7,
+     1,
+     "PMOD0_1"
+    ],
+    [
+     "output",
+     7,
+     2,
+     "PMOD0_2"
+    ],
+    [
+     "output",
+     7,
+     3,
+     "PMOD0_3"
+    ],
+    [
+     "output",
+     7,
+     4,
+     "PMOD0_4"
+    ],
+    [
+     "output",
+     7,
+     5,
+     "PMOD0_5"
+    ],
+    [
+     "output",
+     7,
+     6,
+     "PMOD0_6"
+    ],
+    [
+     "output",
+     7,
+     7,
+     "PMOD0_7"
+    ]
+   ],
+   "start_pin": "PMOD1_0",
+   "f_time": 307.2
+  }
+ ]
+}
