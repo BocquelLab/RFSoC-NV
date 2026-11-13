@@ -280,15 +280,23 @@ class QickBoard:
         nwords = len(binprog)
         if nwords > size:
             raise RuntimeError(f'The program has {nwords} instructions, the tProc program memory holds {size}.')
-        for name, args in decode_program(binprog):
+        program = decode_program(binprog)
+        # gain registers: the usual ones of qick programs, plus any register a "set" instruction on a
+        # generator port takes its gain from (set port, page, $freq, $phase, $addr, $gain, $mode, $time)
+        gain_registers = dict(self._gain_registers)
+        gen_ports = {gen['tproc_ch']: ch for ch, gen in enumerate(self.soccfg['gens'])}
+        for name, args in program:
+            if name == 'set' and args[0] in gen_ports and args[5] != 0:
+                gain_registers[(args[1], args[5])] = gen_ports[args[0]]
+        for name, args in program:
             reg_index = _REGISTER_WRITERS.get(name)
             if reg_index is None:
                 continue
             page = args[1] if name == 'read' else args[0]
             target = (page, args[reg_index])
-            if target not in self._gain_registers:
+            if target not in gain_registers:
                 continue
-            ch = self._gain_registers[target]
+            ch = gain_registers[target]
             if name != 'regwi':
                 raise GainLimitError(f'The program changes the gain of generator {ch} while it runs ("{name}"), '
                                      f'so the gain limit of {self._max_gain:.0f} cannot be guaranteed. Not loaded.')

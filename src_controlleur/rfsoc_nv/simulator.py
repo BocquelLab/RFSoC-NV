@@ -100,6 +100,7 @@ class NVWorld:
         self.gen_ports = {g['tproc_ch']: i for i, g in enumerate(self.gens)}
         self.digital_ports = {p[1] for p in self.pins} | {r['trigger_port'] for r in self.readouts}
         self.ro_len = {}  # readout channel -> window length in tProc cycles (set by config_avg)
+        self.gate = None  # time-resolved counter outside the board: (port, bit, bin width in cycles, bins)
         self.n_retrigger = 0
         self._cache = {}
         self._setup()
@@ -134,6 +135,21 @@ class NVWorld:
         self._gamma_p = 1e3 / p['t_polarize_ns']  # 1/us
         self._gamma_c = 1e3 / p['t_optical_dephase_ns']
         self._cache.clear()
+
+    def set_gate(self, pin=None, bin_width_s=1e-8, record_length_s=1e-6):
+        """ Time-resolved gated counter outside the board (as the NI fast counter): every rising edge of
+        digital output ``pin`` opens a record of ``record_length_s`` in bins of ``bin_width_s``.
+        ``pin=None`` removes it. """
+        self._cache.clear()
+        self._windows = [w for w in self._windows if w[0] != 'gate']
+        if pin is None:
+            self.gate = None
+            return
+        if not 0 <= pin < len(self.pins):
+            raise ValueError(f'gate pin {pin} is not one of the {len(self.pins)} output pins.')
+        bin_cycles = bin_width_s * self.f_time * 1e6
+        bins = max(1, int(round(record_length_s / bin_width_s)))
+        self.gate = (self.pins[pin][1], self.pins[pin][2], bin_cycles, bins)
 
     def _polarized(self):
         s = np.zeros((len(self._f_res), 3))
@@ -230,18 +246,23 @@ class NVWorld:
     def _carry_key(self):
         self._s = np.round(self._s, 5)
         return (tuple(sorted(self._do.items())), self._mw, tuple(self._mw_queue),
-                tuple((w[0], w[1], round(w[2], 6)) for w in self._windows), self._frame, self._s.tobytes())
+                tuple((w[0], w[1], round(float(np.sum(w[2])), 6)) for w in self._windows), self._frame,
+                self._s.tobytes())
 
     def _snapshot(self):
-        return (dict(self._do), self._mw, list(self._mw_queue), [list(w) for w in self._windows],
+        return (dict(self._do), self._mw, list(self._mw_queue), [self._copy_window(w) for w in self._windows],
                 self._frame, self._s.copy())
+
+    @staticmethod
+    def _copy_window(win):
+        return [win[0], win[1], win[2].copy(), win[3]] if win[0] == 'gate' else list(win)
 
     def _restore(self, snap):
         do, mw, mw_queue, windows, frame, s = snap
         self._do = dict(do)
         self._mw = mw
         self._mw_queue = list(mw_queue)
-        self._windows = [list(w) for w in windows]
+        self._windows = [self._copy_window(w) for w in windows]
         self._frame = frame
         self._s = s.copy()
 
@@ -249,6 +270,8 @@ class NVWorld:
         """ Make all carried times relative to the new interval start. """
         for win in self._windows:
             win[1] -= span
+            if win[0] == 'gate':
+                win[3] -= span
         if self._mw is not None:
             omega, phi, freq, end, period, start = self._mw
             if end == _INF:
@@ -272,7 +295,7 @@ class NVWorld:
                 if win[1] < tb:
                     tb = win[1]
             if tb > t:
-                self._segment(tb - t)
+                self._segment(tb - t, t)
                 t = tb
             if self._windows:
                 still_open = []
@@ -304,6 +327,9 @@ class NVWorld:
                             self.n_retrigger += 1  # trigger during an open window: ignored
                         else:
                             self._windows.append([ro, t + self.ro_len[ro], 0.0])
+                gate = self.gate
+                if gate is not None and port == gate[0] and (rising >> gate[1]) & 1:
+                    self._windows.append(['gate', t + gate[2] * gate[3], np.zeros(gate[3]), t])
         elif port in self.gen_ports:
             gen = self.gen_ports[port]
             if gen != self.params['mw_gen_ch']:
@@ -340,11 +366,13 @@ class NVWorld:
         if omega > 0:
             self._frame = freq
 
-    def _segment(self, dt_cycles):
-        """ Evolve the spins for dt with constant laser / microwave state; add counts to open windows. """
+    def _segment(self, dt_cycles, t0=0.0):
+        """ Evolve the spins for dt with constant laser / microwave state; add counts to open windows.
+        ``t0``: start of the segment in the time base of the open windows (cycles). """
         p = self.params
         dt = dt_cycles * self.cyc_us  # us
         s = self._s
+        binned = None  # function(a, b): expected fluorescence counts from a to b (us after the segment start)
         laser = (self.laser_on or not p['laser_gated']) and p['laser_connected']
         mw = self._mw
         mw_on = mw is not None and mw[0] > 0 and p['mw_connected']
@@ -361,6 +389,17 @@ class NVWorld:
             z0 = s[:, 2]
             dark_fraction = (1 - z_ss) * dt - (z0 - z_ss) * (1 - decay) / rate  # integral of (1 - z) dt
             fluorescence = p['count_rate'] * 1e-6 * (dt - 0.5 * p['contrast'] * float(np.dot(self._w, dark_fraction)))
+            if self.gate is not None and any(win[0] == 'gate' for win in self._windows):
+                weights, scale = self._w, p['count_rate'] * 1e-6
+                half_contrast, z_start = 0.5 * p['contrast'], z0.copy()
+                z_ss_arr = np.broadcast_to(z_ss, z_start.shape)
+                rate_arr = np.broadcast_to(rate, z_start.shape)
+
+                def binned(a, b):
+                    width = (b - a)[:, None]
+                    dark = (1 - z_ss_arr) * width - (z_start - z_ss_arr) * (
+                        np.exp(-rate_arr * a[:, None]) - np.exp(-rate_arr * b[:, None])) / rate_arr
+                    return scale * ((b - a) - half_contrast * (dark @ weights))
             s[:, 2] = z_ss + (z0 - z_ss) * decay
             s[:, :2] *= math.exp(-self._gamma_c * dt)
         else:
@@ -386,9 +425,23 @@ class NVWorld:
             # spin-lattice relaxation towards the equal mixture of the three ms levels
             s[:, 2] = -1 / 3 + (s[:, 2] + 1 / 3) * math.exp(-dt / p['t1_us'])
         if self._windows and p['apd_connected']:
-            counts = fluorescence + p['dark_rate'] * 1e-6 * dt
+            dark_rate = p['dark_rate'] * 1e-6
+            counts = fluorescence + dark_rate * dt
             for win in self._windows:
-                win[2] += counts
+                if win[0] != 'gate':
+                    win[2] += counts
+                    continue
+                # time-resolved record: distribute the counts of this segment over its bins
+                start, width, trace = win[3], self.gate[2], win[2]
+                first = max(0, int((t0 - start) // width))
+                last = min(len(trace), int(math.ceil((t0 + dt_cycles - start) / width)))
+                if last <= first:
+                    continue
+                edges = np.clip(start + width * np.arange(first, last + 1), t0, t0 + dt_cycles)
+                a, b = (edges[:-1] - t0) * self.cyc_us, (edges[1:] - t0) * self.cyc_us
+                trace[first:last] += dark_rate * (b - a)
+                if binned is not None:
+                    trace[first:last] += binned(a, b)
 
 
 class _ReadoutJob:
@@ -443,6 +496,10 @@ class SimulatedSoc:
         self._total_count = 0
         self._count = 0
         self._stats = dict(runs=0, short_reads=0, zero_threshold=0)
+        self._gate_lock = threading.Lock()
+        self._gate_enabled = False
+        self._gate_acc = None  # expected counts of the time-resolved counter outside the board, (gates, bins)
+        self._gate_count = 0
         self._last_run = {}
 
     # ================================================================== simulation-only interface
@@ -474,6 +531,36 @@ class SimulatedSoc:
             expected = self._world.count(float(duration) * 1e6)
             return int(self._rng.poisson(expected)) if expected > 0 else 0
 
+    def sim_gated_counter_start(self, pin, bin_width, record_length, number_of_gates):
+        """ Simulate a time-resolved gated photon counter outside the board, as the NI fast counter: every
+        rising edge of digital output ``pin`` (index in the output pin list, 1 = PMOD0_1) starts a record of
+        ``record_length`` seconds in bins of ``bin_width`` seconds; record number i goes to row
+        i % number_of_gates. Only while no program runs (the counter is started before the pulses).
+        """
+        with self._lock:
+            thread = self._thread
+            if thread is not None:
+                thread.join(0.2)
+            if self._running():
+                raise RuntimeError('simulator: start the gated counter before the pulse program')
+            self._world.set_gate(int(pin), float(bin_width), float(record_length))
+            with self._gate_lock:
+                self._gate_acc = np.zeros((max(1, int(number_of_gates)), self._world.gate[3]))
+                self._gate_count = 0
+                self._gate_enabled = True
+
+    def sim_gated_counter_read(self):
+        """ @return (expected counts so far as array (gates, bins) without shot noise, number of records) """
+        with self._gate_lock:
+            if self._gate_acc is None:
+                raise RuntimeError('simulator: the gated counter was not started')
+            return self._gate_acc.copy(), self._gate_count
+
+    def sim_gated_counter_stop(self):
+        """ Stop recording: later records are ignored. What was recorded can still be read. """
+        with self._gate_lock:
+            self._gate_enabled = False
+
     def sim_report(self):
         """ What the emulator saw during the last program: number of words and executed instructions,
         timed outputs issued too late, fill level of the output queues, data that was not ready, ... """
@@ -486,6 +573,8 @@ class SimulatedSoc:
                       late_outputs=emu.n_late,
                       worst_late_cycles=emu.worst_late,
                       max_queued_outputs=emu.max_queue,
+                      processor_stalls=emu.n_stalls,
+                      max_lead_cycles=emu.max_lead,
                       assumed_queue_depth=emu.fifo_depth,
                       cycles_per_instruction=emu.cycles_per_instruction,
                       unsupported_instructions=sorted(emu.unsupported),
@@ -692,7 +781,8 @@ class SimulatedSoc:
     def _run(self, job):
         emu, world = self._emu, self._world
         wall_start = time.perf_counter()
-        counter_addr = job.counter_addr if job is not None else None
+        # without a readout job, hand over at every write of the conventional counter (data memory word 1)
+        counter_addr = job.counter_addr if job is not None else 1
         ended = False
         try:
             while not self._stop.is_set():
@@ -733,7 +823,13 @@ class SimulatedSoc:
         else:
             events = ()
         for ro, expected in world.process(events, t_end):
-            self._hist[ro].append(self._to_adc(ro, expected))
+            if ro == 'gate':
+                with self._gate_lock:
+                    if self._gate_enabled and self._gate_acc.shape[1] == len(expected):
+                        self._gate_acc[self._gate_count % len(self._gate_acc)] += expected
+                        self._gate_count += 1
+            elif ro in self._hist:
+                self._hist[ro].append(self._to_adc(ro, expected))
 
     def _to_adc(self, ro, expected):
         """ Value the accumulation buffer returns for a window with ``expected`` APD pulses. """

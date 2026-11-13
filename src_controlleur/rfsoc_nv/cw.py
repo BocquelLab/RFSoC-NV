@@ -28,7 +28,7 @@ import time
 
 from qick.asm_v1 import QickProgram
 
-__all__ = ['SteppedCW']
+__all__ = ['SteppedCW', 'frequency_word']
 
 _ADDR_INDEX = 2  # data memory: index of the entry the next program run plays
 _ADDR_SIZE = 3  # number of entries
@@ -41,6 +41,23 @@ def _signed32(value):
     """ 32-bit word as the signed number the data memory transfer of the board expects. """
     value &= 0xFFFFFFFF
     return value - 0x100000000 if value & 0x80000000 else value
+
+
+def frequency_word(soccfg, gen_ch, nqz, frequency, check_zone=True):
+    """ Generator frequency register value for ``frequency`` (Hz) and the frequency really played.
+
+    @return (int word, float frequency in Hz)
+    Raises ValueError if the frequency is outside Nyquist zone ``nqz`` of the generator (not checked with
+    check_zone=False: any frequency below the DAC sampling rate).
+    """
+    fs = soccfg['gens'][gen_ch]['fs'] * 1e6
+    low, high = ((nqz - 1) * fs / 2, nqz * fs / 2) if check_zone else (0.0, fs)
+    frequency = float(frequency)
+    if not low < frequency < high:
+        raise ValueError(f'Frequency {frequency / 1e6:.6f} MHz is outside the range of generator {gen_ch} in '
+                         f'Nyquist zone {nqz} (]{low / 1e6:.1f}, {high / 1e6:.1f}[ MHz).')
+    word = int(soccfg.freq2reg(frequency / 1e6, gen_ch=gen_ch))
+    return word, float(soccfg.reg2freq(word, gen_ch=gen_ch)) * 1e6
 
 
 class SteppedCW:
@@ -125,14 +142,7 @@ class SteppedCW:
         return self._word_and_frequency(frequency)[1]
 
     def _word_and_frequency(self, frequency):
-        low, high = self.frequency_limits
-        frequency = float(frequency)
-        if not low < frequency < high:
-            raise ValueError(f'Frequency {frequency / 1e6:.6f} MHz is outside the range of generator '
-                             f'{self._gen_ch} in Nyquist zone {self._nqz} (]{low / 1e6:.1f}, {high / 1e6:.1f}[ MHz).')
-        soccfg = self._board.soccfg
-        word = int(soccfg.freq2reg(frequency / 1e6, gen_ch=self._gen_ch))
-        return word, float(soccfg.reg2freq(word, gen_ch=self._gen_ch)) * 1e6
+        return frequency_word(self._board.soccfg, self._gen_ch, self._nqz, frequency, self._check_zone)
 
     # ------------------------------------------------------------------ set up
     def configure(self, frequencies, gain):

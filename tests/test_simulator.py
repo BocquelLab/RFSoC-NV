@@ -14,7 +14,8 @@ warnings.simplefilter('ignore')
 
 import qickdawg as qd  # noqa: E402
 from qick.asm_v1 import QickProgram  # noqa: E402
-from rfsoc_nv import QickBoard, GainLimitError, BoardBusyError, SteppedCW, decode_program  # noqa: E402
+from rfsoc_nv import (QickBoard, GainLimitError, BoardBusyError, SteppedCW, PulseSequencer,  # noqa: E402
+                      decode_program)
 
 RESONANCE = 2870.0  # MHz
 RABI_FULL = 10.0  # MHz at full gain
@@ -354,6 +355,175 @@ def test_stepped_cw_refusals_and_lost_steps():
         else:
             raise AssertionError('lost steps were not detected')
         cw.stop()
+    finally:
+        board.close()
+
+
+def _cycles(seconds):
+    return int(round(seconds * 307.2e6))
+
+
+def _laser_pattern(mw_groups, laser=3e-6, wait=1e-6, lead=0.5e-6):
+    """ One laser pulse per entry of mw_groups; an entry is a list of (pulse length, delay after it) in s.
+    Pin 0 = laser, pin 1 = gate marker (same timing). -> (length, pins, microwave) in tProc cycles """
+    t, pins, mw = 0, {0: [], 1: []}, []
+    for group in mw_groups:
+        t += _cycles(lead)
+        for pulse, delay in group:
+            mw.append((t, t + _cycles(pulse)))
+            t += _cycles(pulse) + _cycles(delay)
+        t += _cycles(0.1e-6)
+        for pin in pins:
+            pins[pin].append((t, t + _cycles(laser)))
+        t += _cycles(laser) + _cycles(wait)
+    return t, pins, mw
+
+
+def _run_pattern(board, seq, n_gates, passes=40, record=3e-6):
+    """ Play the compiled pattern for some repetitions; -> noise-free signal per laser pulse
+    (first 300 ns of the fluorescence divided by the last 1 us) """
+    soc = board.soc
+    soc.sim_gated_counter_start(pin=1, bin_width=10e-9, record_length=record, number_of_gates=n_gates)
+    seq.start()
+    t_end = time.time() + 60
+    while seq.passes() < passes and time.time() < t_end:
+        time.sleep(0.01)
+    assert seq.passes() >= passes, 'the pattern does not repeat'
+    seq.stop()
+    expected, records = soc.sim_gated_counter_read()
+    assert records >= passes * n_gates, (records, passes, n_gates)
+    return expected[:, :30].sum(axis=1) / expected[:, -100:].sum(axis=1)
+
+
+def test_pulse_sequencer_rabi():
+    """ Endless pattern (laser, gate marker, microwave pulses) counted by a gated counter outside the board. """
+    board = make_board()
+    try:
+        seq = PulseSequencer(board, gen_ch=0, nqz=2)
+        taus = np.arange(1, 41) * 10e-9
+        length, pins, mw = _laser_pattern([[(tau, 0.0)] for tau in taus])
+        info = seq.compile(length, pins, mw, frequency=RESONANCE * 1e6, gain=GAIN)
+        assert info['microwave_pulses'] == 40 and info['digital_changes'] == 80, info
+        assert info['instructions'] < 250 and info['max_lead'] < 1.1e-3, info
+        assert abs(info['pass_duration'] - length / 307.2e6) < 1e-12
+        signal = _run_pattern(board, seq, len(taus))
+        played = np.array([_cycles(tau) for tau in taus]) / 307.2  # us, on the 3.2552 ns grid
+        frequency = fit_frequency(played, signal)
+        assert abs(frequency - RABI_FULL * GAIN / 32766) < 0.3, frequency
+        # the first point (10 ns pulse) is bright in every repetition, also after the loop has wrapped around
+        assert signal[0] > 0.97 * signal.max(), signal[:3]
+        assert signal.min() < 0.9 * signal.max()
+        out = board.soc.sim_outputs()
+        assert not out['laser_on'] and out['mw'] is None, out
+    finally:
+        board.close()
+
+
+def test_pulse_sequencer_ramsey_detuned():
+    board = make_board()
+    try:
+        seq = PulseSequencer(board, gen_ch=0, nqz=2)
+        pihalf = 0.25 / (RABI_FULL * GAIN / 32766) * 1e-6  # s
+        taus = np.arange(1, 41) * 20e-9
+        length, pins, mw = _laser_pattern([[(pihalf, tau), (pihalf, 0.0)] for tau in taus])
+        info = seq.compile(length, pins, mw, frequency=(RESONANCE + 2.0) * 1e6, gain=GAIN)
+        assert info['microwave_pulses'] == 80
+        assert info['instructions'] < 300, info  # equal pulse lengths share one register
+        signal = _run_pattern(board, seq, len(taus))
+        played = np.array([_cycles(pihalf) + _cycles(tau) for tau in taus]) / 307.2
+        frequency = fit_frequency(played, signal)
+        assert abs(frequency - 2.0) < 0.25, frequency
+    finally:
+        board.close()
+
+
+def test_pulse_sequencer_limits():
+    board = make_board()
+    try:
+        seq = PulseSequencer(board, gen_ch=0, nqz=2)
+        # what is refused, each with a ValueError (GainLimitError is one) or RuntimeError for the memory
+        length, pins, mw = _laser_pattern([[(50e-9, 0.0)]] * 3)
+        bad = [dict(length=length, pins=pins, microwave=mw),  # microwave pulses without frequency / gain
+               dict(length=length, pins=pins, microwave=mw, frequency=RESONANCE * 1e6, gain=20001),
+               dict(length=length, pins=pins, microwave=mw, frequency=2400e6, gain=100),
+               dict(length=1000, microwave=[(10, 12)], frequency=RESONANCE * 1e6, gain=100),  # 2 cycles
+               dict(length=1000, pins={0: [(10, 12), (13, 15), (16, 18), (19, 21), (22, 24), (25, 27)]}),  # too dense
+               dict(length=1000, pins={0: [(10, 500), (400, 600)]}),  # overlap
+               dict(length=1000, pins={9: [(10, 500)]})]
+        for kwargs in bad:
+            try:
+                seq.compile(**kwargs)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f'accepted: {kwargs}')
+        length, pins, mw = _laser_pattern([[(tau, 0.0)] for tau in np.arange(1, 301) * 10e-9])
+        try:
+            seq.compile(length, pins, mw, frequency=RESONANCE * 1e6, gain=100)
+        except RuntimeError as err:
+            assert 'program memory' in str(err)
+        else:
+            raise AssertionError('a program larger than the program memory was accepted')
+        # 200 different microwave pulses with a laser pulse each fit
+        length, pins, mw = _laser_pattern([[(tau, 0.0)] for tau in np.arange(1, 201) * 10e-9])
+        assert seq.compile(length, pins, mw, frequency=RESONANCE * 1e6, gain=100)['instructions'] <= 1024
+
+        # a pulse longer than the generator maximum is played as pulses without gap; a pin that is high at the
+        # end and at the start of the pattern stays high; a pin that is always high is set once
+        info = seq.compile(200000, {0: [(0, 1000), (150000, 200000)], 2: [(0, 200000)]}, [(1000, 141000)],
+                           frequency=RESONANCE * 1e6, gain=100)
+        assert info['microwave_pulses'] == 3 and info['digital_changes'] == 2, info
+        seq.start()
+        while seq.passes() < 3:
+            time.sleep(0.01)
+        assert seq.running
+        try:
+            seq.compile(1000, {0: [(10, 500)]})
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('compile() while running was accepted')
+        seq.stop()
+        out = board.soc.sim_outputs()
+        assert not out['laser_on'] and out['mw'] is None, out
+        # a pattern without microwave needs no frequency; a tight 1 MHz square wave on two pins is fine
+        info = seq.compile(307, {0: [(0, 150)], 1: [(100, 250)]})
+        assert info['microwave_pulses'] == 0 and info['digital_changes'] == 4, info
+    finally:
+        board.close()
+
+
+def test_emulator_queue_stalls_processor():
+    """ As measured on the board: 40 outputs 10 ms apart, queued at once, hold the processor for 250 ms. """
+    from rfsoc_nv.tproc_v1 import TProcV1Emulator
+    board = make_board()
+    try:
+        prog = QickProgram(board.soccfg)
+        step = 3072000  # 10 ms
+        for i in range(40):
+            prog.seti(7, 0, 0, (i + 1) * step)
+        prog.regwi(0, 15, 1)
+        prog.memwi(0, 15, 1)
+        prog.end()
+        prog.compile()
+        emu = TProcV1Emulator()
+        emu.load([int(w) for w in prog.binprog])
+        while emu.run(counter_addr=1) != 'count':
+            pass
+        assert emu.n_stalls > 0 and emu.n_late == 0
+        assert abs(emu.t_cpu / 307.2e6 - 0.25) < 0.011, emu.t_cpu / 307.2e6
+        # the gain limit also covers a register that only a "set" instruction uses as gain
+        prog = QickProgram(board.soccfg)
+        prog.regwi(0, 5, 30000)
+        prog.set(0, 0, 22, 23, 24, 5, 26, 0)
+        prog.end()
+        prog.compile()
+        try:
+            board.soc.load_bin_program(prog.binprog)
+        except GainLimitError:
+            pass
+        else:
+            raise AssertionError('gain above the limit in an unusual register was loaded')
     finally:
         board.close()
 

@@ -23,7 +23,7 @@ warnings.simplefilter('ignore')
 
 import qickdawg as qd  # noqa: E402
 from qick.asm_v1 import QickProgram  # noqa: E402
-from rfsoc_nv import SteppedCW, QickBoard, GainLimitError, BoardConnectionError  # noqa: E402
+from rfsoc_nv import SteppedCW, PulseSequencer, QickBoard, GainLimitError, BoardConnectionError  # noqa: E402
 
 COUNTER = 1
 
@@ -197,6 +197,56 @@ def main():
             print(f'[ok] refused: {err}')
         else:
             raise AssertionError('stepped CW above the gain limit was accepted')
+
+        # ---- endless pulse pattern (pulsed measurements with a counter outside the board)
+        seq = PulseSequencer(board, gen_ch=0, nqz=2)
+        f_clock = seq.clock_frequency
+
+        def rabi_pattern(n_points):
+            t, pins, mw = 0, {0: [], 1: []}, []
+            for i in range(n_points):
+                t += int(0.5e-6 * f_clock)
+                mw.append((t, t + 3 * (i + 1)))
+                t += 3 * (i + 1) + 31
+                pins[0].append((t, t + 922))
+                pins[1].append((t, t + 922))
+                t += 922 + 307
+            return t, pins, mw
+
+        length, pins, mw = rabi_pattern(50)
+        start = time.perf_counter()
+        info = seq.compile(length, pins, mw, frequency=2.87e9, gain=args.gain)
+        t_compile = time.perf_counter() - start
+        start = time.perf_counter()
+        seq.start()
+        t_start = time.perf_counter() - start
+        time.sleep(0.2)
+        t1, n1 = time.perf_counter(), seq.passes()
+        time.sleep(3.0)
+        t2, n2 = time.perf_counter(), seq.passes()
+        period = (t2 - t1) / (n2 - n1)
+        start = time.perf_counter()
+        seq.stop()
+        t_stop = time.perf_counter() - start
+        assert abs(period / info['pass_duration'] - 1) < 5e-3, (period, info['pass_duration'])
+        print(f'[ok] pulse pattern, 50 Rabi points: {info["instructions"]} instructions, repetition period '
+              f'{period * 1e6:.2f} us measured, {info["pass_duration"] * 1e6:.2f} us programmed ({n2 - n1} '
+              f'repetitions); compile {t_compile * 1e3:.0f} ms, start {t_start * 1e3:.0f} ms, stop {t_stop * 1e3:.0f} ms')
+        length, pins, mw = rabi_pattern(200)
+        info = seq.compile(length, pins, mw, frequency=2.87e9, gain=args.gain)
+        seq.start()
+        time.sleep(0.5)
+        n = seq.passes()
+        seq.stop()
+        assert n > 0
+        print(f'[ok] pulse pattern, 200 Rabi points: {info["instructions"]} of {info["program_memory"]} instructions, '
+              f'runs ({n} repetitions in 0.5 s)')
+        try:
+            seq.compile(length, pins, mw, frequency=2.87e9, gain=int(args.max_gain) + 1)
+        except GainLimitError as err:
+            print(f'[ok] refused: {err}')
+        else:
+            raise AssertionError('pulse pattern above the gain limit was accepted')
 
         if args.simulate:
             print('     simulator report:', board.soc.sim_report())
